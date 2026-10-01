@@ -1,43 +1,28 @@
 import { router } from 'expo-router';
 import {
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { RTCView } from 'react-native-webrtc';
 
-import '@/lib/webrtc-setup';
-import { useViewerSession } from '@/hooks/use-viewer-session';
+import { useViewerSessionContext } from '@/hooks/viewer-session-context';
 
-export default function ViewerScreen() {
+export default function ViewerConnectScreen() {
   const insets = useSafeAreaInsets();
-  const session = useViewerSession();
-  const connected = session.status === 'connecting' || session.status === 'connected';
-  const inputsEditable = session.status !== 'connected';
+  const session = useViewerSessionContext();
+  const connecting = session.status === 'connecting';
 
   return (
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {session.remoteStream ? (
-        <RTCView
-          streamURL={session.remoteStream.toURL()}
-          style={styles.video}
-          objectFit="contain"
-        />
-      ) : (
-        <View style={styles.placeholder}>
-          <Text style={styles.placeholderText}>Live video will show here</Text>
-        </View>
-      )}
-
-      <View style={[styles.overlay, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.inner, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.topRow}>
           <Pressable onPress={() => router.back()} style={styles.back}>
             <Text style={styles.backText}>Back</Text>
@@ -45,19 +30,22 @@ export default function ViewerScreen() {
           <Text style={styles.title}>Viewer</Text>
         </View>
 
-        <ScrollView style={styles.panelScroll} contentContainerStyle={styles.panel} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.panel}
+          keyboardShouldPersistTaps="handled">
           <Text style={styles.status}>{session.statusText}</Text>
 
           <View style={styles.modeRow}>
             <Pressable
               style={[styles.modeChip, session.mode === 'discovered' && styles.modeChipActive]}
-              disabled={connected}
+              disabled={connecting}
               onPress={() => session.setMode('discovered')}>
               <Text style={styles.modeChipText}>Discovered</Text>
             </Pressable>
             <Pressable
               style={[styles.modeChip, session.mode === 'manual' && styles.modeChipActive]}
-              disabled={connected}
+              disabled={connecting}
               onPress={() => session.setMode('manual')}>
               <Text style={styles.modeChipText}>Manual IP</Text>
             </Pressable>
@@ -70,7 +58,8 @@ export default function ViewerScreen() {
               </Text>
               {session.cameras.length === 0 ? (
                 <Text style={styles.hint}>
-                  No cameras found yet. Make sure the camera phone is streaming with Discoverable on.
+                  No cameras found yet. Make sure the camera phone is streaming with Discoverable
+                  on.
                 </Text>
               ) : (
                 session.cameras.map((camera) => {
@@ -78,7 +67,7 @@ export default function ViewerScreen() {
                   return (
                     <Pressable
                       key={camera.id}
-                      disabled={connected}
+                      disabled={connecting}
                       onPress={() => session.selectCamera(camera)}
                       style={[styles.cameraRow, selected && styles.cameraRowSelected]}>
                       <Text style={styles.cameraName}>{camera.name}</Text>
@@ -101,7 +90,7 @@ export default function ViewerScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="numbers-and-punctuation"
-                editable={inputsEditable}
+                editable={!connecting}
                 style={styles.input}
               />
             </View>
@@ -115,19 +104,22 @@ export default function ViewerScreen() {
             placeholderTextColor="#64748B"
             keyboardType="number-pad"
             maxLength={4}
-            editable={inputsEditable}
+            editable={!connecting}
             style={styles.input}
           />
 
           {session.error ? <Text style={styles.error}>{session.error}</Text> : null}
 
           <Pressable
-            style={[styles.cta, connected ? styles.ctaStop : styles.ctaStart]}
+            style={[styles.cta, connecting ? styles.ctaDisabled : styles.ctaStart]}
+            disabled={connecting}
             onPress={() => {
-              if (connected) session.disconnect();
-              else void session.connect();
+              void (async () => {
+                const ok = await session.connect();
+                if (ok) router.replace('/viewer/watch');
+              })();
             }}>
-            <Text style={styles.ctaText}>{connected ? 'Disconnect' : 'Connect'}</Text>
+            <Text style={styles.ctaText}>{connecting ? 'Connecting…' : 'Connect'}</Text>
           </Pressable>
         </ScrollView>
       </View>
@@ -138,30 +130,17 @@ export default function ViewerScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#000',
-  },
-  video: {
-    ...StyleSheet.absoluteFill,
-  },
-  placeholder: {
-    ...StyleSheet.absoluteFill,
-    alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: '#0B1220',
   },
-  placeholderText: {
-    color: '#A8B3C7',
-    fontSize: 16,
-  },
-  overlay: {
+  inner: {
     flex: 1,
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
   },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginBottom: 16,
   },
   back: {
     paddingVertical: 8,
@@ -178,14 +157,15 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
   },
-  panelScroll: {
-    maxHeight: '70%',
+  scroll: {
+    flex: 1,
   },
   panel: {
     backgroundColor: 'rgba(11,18,32,0.9)',
     borderRadius: 18,
     padding: 16,
     gap: 8,
+    paddingBottom: 24,
   },
   status: {
     color: '#F4F7FB',
@@ -274,8 +254,8 @@ const styles = StyleSheet.create({
   ctaStart: {
     backgroundColor: '#1F6FEB',
   },
-  ctaStop: {
-    backgroundColor: '#BE123C',
+  ctaDisabled: {
+    backgroundColor: '#334155',
   },
   ctaText: {
     color: '#fff',

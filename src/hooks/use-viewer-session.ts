@@ -15,7 +15,7 @@ import { STREAM_CONFIG, wsUrlForHost } from '@/lib/stream-config';
 type Status = 'idle' | 'connecting' | 'connected' | 'error';
 type ConnectMode = 'discovered' | 'manual';
 
-type ViewerSession = {
+export type ViewerSession = {
   status: Status;
   statusText: string;
   mode: ConnectMode;
@@ -30,7 +30,7 @@ type ViewerSession = {
   setHost: (host: string) => void;
   setPin: (pin: string) => void;
   selectCamera: (camera: DiscoveredCamera) => void;
-  connect: () => Promise<void>;
+  connect: () => Promise<boolean>;
   disconnect: () => void;
 };
 
@@ -242,7 +242,6 @@ export function useViewerSession(): ViewerSession {
       );
     };
 
-    // @ts-expect-error react-native-webrtc event typing
     pc.oniceconnectionstatechange = () => {
       const state = pc.iceConnectionState;
       if (state === 'failed' || state === 'disconnected') {
@@ -325,7 +324,7 @@ export function useViewerSession(): ViewerSession {
     }
   }
 
-  async function connectInternal() {
+  async function connectInternal(): Promise<boolean> {
     cleanupConnection();
     intentionalCloseRef.current = false;
     setError(null);
@@ -339,7 +338,7 @@ export function useViewerSession(): ViewerSession {
       setStatus('error');
       setStatusText('Select a discovered camera');
       setError('No camera selected');
-      return;
+      return false;
     }
     if (!trimmedHost) {
       setStatus('error');
@@ -349,13 +348,13 @@ export function useViewerSession(): ViewerSession {
           : 'Enter the camera phone LAN IP',
       );
       setError(modeRef.current === 'discovered' ? 'No camera selected' : 'Missing host');
-      return;
+      return false;
     }
     if (!/^\d{4}$/.test(trimmedPin)) {
       setStatus('error');
       setStatusText('PIN must be 4 digits');
       setError('Invalid PIN');
-      return;
+      return false;
     }
 
     const url = wsUrlForHost(trimmedHost);
@@ -405,17 +404,19 @@ export function useViewerSession(): ViewerSession {
           );
         }
       };
+      return true;
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Connection failed';
       setError(message);
       setStatus('error');
       setStatusText(message);
+      return false;
     }
   }
 
-  async function connect() {
+  async function connect(): Promise<boolean> {
     intentionalCloseRef.current = false;
-    await connectInternal();
+    return connectInternal();
   }
 
   function disconnect() {

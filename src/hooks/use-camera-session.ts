@@ -21,7 +21,7 @@ import {
 
 type Status = 'idle' | 'starting' | 'waiting' | 'connected' | 'error';
 
-type CameraSession = {
+export type CameraSession = {
   status: Status;
   statusText: string;
   pin: string;
@@ -29,8 +29,10 @@ type CameraSession = {
   wsUrl: string;
   localStream: MediaStream | null;
   error: string | null;
+  previewError: string | null;
   discoverable: boolean;
   setDiscoverable: (enabled: boolean) => Promise<void>;
+  retryPreview: () => Promise<void>;
   start: () => Promise<void>;
   stop: () => Promise<void>;
 };
@@ -56,6 +58,7 @@ export function useCameraSession(): CameraSession {
   const [wsUrl, setWsUrl] = useState('');
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [discoverable, setDiscoverableState] = useState(true);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -63,7 +66,9 @@ export function useCameraSession(): CameraSession {
   const sessionIdRef = useRef<string | null>(null);
   const runningRef = useRef(false);
   const discoverableRef = useRef(true);
+  const previewErrorRef = useRef<string | null>(null);
   const subscriptionsRef = useRef<EventSubscription[]>([]);
+  const previewPromiseRef = useRef<Promise<MediaStream | null> | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -71,8 +76,9 @@ export function useCameraSession(): CameraSession {
       discoverableRef.current = enabled;
       setDiscoverableState(enabled);
     })();
+    void ensurePreview();
     return () => {
-      void cleanup();
+      void teardownAll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -89,6 +95,14 @@ export function useCameraSession(): CameraSession {
       // ignore
     }
     pcRef.current = null;
+  }
+
+  function stopPreviewTracks() {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setLocalStream(null);
   }
 
   async function syncAdvertising(enabled: boolean) {
@@ -108,7 +122,8 @@ export function useCameraSession(): CameraSession {
     }
   }
 
-  async function cleanup() {
+  /** Tear down signaling/peer/advertising but keep local preview tracks. */
+  async function stopStreaming() {
     runningRef.current = false;
     sessionIdRef.current = null;
     clearSubscriptions();
@@ -128,13 +143,62 @@ export function useCameraSession(): CameraSession {
       // ignore
     }
     disposePeer();
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    setLocalStream(null);
+    setHost('');
+    setWsUrl('');
     setStatus('idle');
+    setStatusText('Ready');
+  }
+
+  /** Full teardown including camera/mic tracks — only on unmount. */
+  async function teardownAll() {
+    await stopStreaming();
+    stopPreviewTracks();
+    previewPromiseRef.current = null;
+    setPreviewError(null);
     setStatusText('Stopped');
+  }
+
+  async function ensurePreview(): Promise<MediaStream | null> {
+    if (streamRef.current) return streamRef.current;
+    if (previewPromiseRef.current) return previewPromiseRef.current;
+
+    previewPromiseRef.current = (async () => {
+      previewErrorRef.current = null;
+      setPreviewError(null);
+      try {
+        const media = (await mediaDevices.getUserMedia({
+          audio: true,
+          video: {
+            facingMode: 'environment',
+            width: STREAM_CONFIG.width,
+            height: STREAM_CONFIG.height,
+            frameRate: STREAM_CONFIG.fps,
+          },
+        })) as MediaStream;
+
+        streamRef.current = media;
+        setLocalStream(media);
+        return media;
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : 'Camera or microphone permission denied';
+        previewErrorRef.current = message;
+        setPreviewError(message);
+        streamRef.current = null;
+        setLocalStream(null);
+        return null;
+      } finally {
+        previewPromiseRef.current = null;
+      }
+    })();
+
+    return previewPromiseRef.current;
+  }
+
+  async function retryPreview() {
+    stopPreviewTracks();
+    previewPromiseRef.current = null;
+    await ensurePreview();
   }
 
   async function createOfferForViewer(sessionId: string) {
@@ -163,7 +227,6 @@ export function useCameraSession(): CameraSession {
       );
     };
 
-    // @ts-expect-error react-native-webrtc event typing
     pc.oniceconnectionstatechange = () => {
       const state = pc.iceConnectionState;
       if (state === 'connected' || state === 'completed') {
@@ -210,24 +273,20 @@ export function useCameraSession(): CameraSession {
     if (runningRef.current) return;
     setError(null);
     setStatus('starting');
-    setStatusText('Starting camera…');
+    setStatusText('Starting stream…');
 
     try {
+      const media = await ensurePreview();
+      if (!media) {
+        const message = previewErrorRef.current ?? 'Camera preview unavailable';
+        setError(message);
+        setStatus('error');
+        setStatusText(message);
+        return;
+      }
+
       const nextPin = await loadOrCreatePin();
       setPin(nextPin);
-
-      const media = (await mediaDevices.getUserMedia({
-        audio: true,
-        video: {
-          facingMode: 'environment',
-          width: STREAM_CONFIG.width,
-          height: STREAM_CONFIG.height,
-          frameRate: STREAM_CONFIG.fps,
-        },
-      })) as MediaStream;
-
-      streamRef.current = media;
-      setLocalStream(media);
 
       const info = await IspySignaling.startServer(STREAM_CONFIG.signalingPort, nextPin);
       setHost(info.host);
@@ -280,16 +339,16 @@ export function useCameraSession(): CameraSession {
         }),
       ];
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Failed to start camera';
+      const message = e instanceof Error ? e.message : 'Failed to start stream';
       setError(message);
       setStatus('error');
       setStatusText(message);
-      await cleanup();
+      await stopStreaming();
     }
   }
 
   async function stop() {
-    await cleanup();
+    await stopStreaming();
   }
 
   return {
@@ -300,8 +359,10 @@ export function useCameraSession(): CameraSession {
     wsUrl,
     localStream,
     error,
+    previewError,
     discoverable,
     setDiscoverable,
+    retryPreview,
     start,
     stop,
   };
