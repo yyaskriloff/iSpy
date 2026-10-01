@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android", "web"],
+  "apple": {
+    "modules": ["IspySignalingModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.ispysignaling.IspySignalingModule"]
+  }
+}
