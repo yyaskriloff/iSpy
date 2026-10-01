@@ -1,27 +1,16 @@
-import { router } from 'expo-router';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router'
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { useViewerSessionContext } from '@/hooks/viewer-session-context';
+import { useViewerSessionContext } from '@/hooks/viewer-session-context'
 
 export default function ViewerConnectScreen() {
-  const insets = useSafeAreaInsets();
-  const session = useViewerSessionContext();
-  const connecting = session.status === 'connecting';
+  const insets = useSafeAreaInsets()
+  const session = useViewerSessionContext()
+  const connecting = session.status === 'connecting'
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.inner, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.topRow}>
           <Pressable onPress={() => router.back()} style={styles.back}>
@@ -30,10 +19,7 @@ export default function ViewerConnectScreen() {
           <Text style={styles.title}>Viewer</Text>
         </View>
 
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.panel}
-          keyboardShouldPersistTaps="handled">
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.panel} keyboardShouldPersistTaps="handled">
           <Text style={styles.status}>{session.statusText}</Text>
 
           <View style={styles.modeRow}>
@@ -53,17 +39,14 @@ export default function ViewerConnectScreen() {
 
           {session.mode === 'discovered' ? (
             <View style={styles.section}>
-              <Text style={styles.label}>
-                {session.browsing ? 'Scanning Wi‑Fi…' : 'Nearby cameras'}
-              </Text>
+              <Text style={styles.label}>{session.browsing ? 'Scanning Wi‑Fi…' : 'Nearby cameras'}</Text>
               {session.cameras.length === 0 ? (
                 <Text style={styles.hint}>
-                  No cameras found yet. Make sure the camera phone is streaming with Discoverable
-                  on.
+                  No cameras found yet. Make sure the camera phone is streaming with Discoverable on.
                 </Text>
               ) : (
-                session.cameras.map((camera) => {
-                  const selected = session.selectedCameraId === camera.id;
+                session.cameras.map(camera => {
+                  const selected = session.selectedCameraId === camera.id
                   return (
                     <Pressable
                       key={camera.id}
@@ -75,7 +58,7 @@ export default function ViewerConnectScreen() {
                         {camera.host}:{camera.port}
                       </Text>
                     </Pressable>
-                  );
+                  )
                 })
               )}
             </View>
@@ -115,68 +98,68 @@ export default function ViewerConnectScreen() {
             disabled={connecting}
             onPress={() => {
               void (async () => {
-                const ok = await session.connect();
-                if (ok) router.replace('/viewer/watch');
-              })();
+                const ok = await session.connect()
+                if (ok) router.replace('/viewer/watch')
+              })()
             }}>
             <Text style={styles.ctaText}>{connecting ? 'Connecting…' : 'Connect'}</Text>
           </Pressable>
         </ScrollView>
       </View>
     </KeyboardAvoidingView>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#0B1220',
+    backgroundColor: '#0B1220'
   },
   inner: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 16
   },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 16,
+    marginBottom: 16
   },
   back: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.45)'
   },
   backText: {
     color: '#fff',
-    fontWeight: '600',
+    fontWeight: '600'
   },
   title: {
     color: '#fff',
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '700'
   },
   scroll: {
-    flex: 1,
+    flex: 1
   },
   panel: {
     backgroundColor: 'rgba(11,18,32,0.9)',
     borderRadius: 18,
     padding: 16,
     gap: 8,
-    paddingBottom: 24,
+    paddingBottom: 24
   },
   status: {
     color: '#F4F7FB',
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 4
   },
   modeRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 4,
+    marginBottom: 4
   },
   modeChip: {
     flex: 1,
@@ -185,29 +168,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#111827',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#334155'
   },
   modeChipActive: {
     backgroundColor: '#1F6FEB',
-    borderColor: '#1F6FEB',
+    borderColor: '#1F6FEB'
   },
   modeChipText: {
     color: '#F8FAFC',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 14
   },
   section: {
-    gap: 8,
+    gap: 8
   },
   label: {
     color: '#A8B3C7',
     fontSize: 13,
-    marginTop: 4,
+    marginTop: 4
   },
   hint: {
     color: '#64748B',
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 18
   },
   cameraRow: {
     borderRadius: 12,
@@ -216,20 +199,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#111827',
     paddingHorizontal: 14,
     paddingVertical: 12,
-    gap: 2,
+    gap: 2
   },
   cameraRowSelected: {
     borderColor: '#1F6FEB',
-    backgroundColor: '#172554',
+    backgroundColor: '#172554'
   },
   cameraName: {
     color: '#F8FAFC',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600'
   },
   cameraMeta: {
     color: '#A8B3C7',
-    fontSize: 13,
+    fontSize: 13
   },
   input: {
     backgroundColor: '#111827',
@@ -239,27 +222,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     color: '#F8FAFC',
-    fontSize: 16,
+    fontSize: 16
   },
   error: {
     color: '#FDA4AF',
-    fontSize: 14,
+    fontSize: 14
   },
   cta: {
     marginTop: 10,
     borderRadius: 14,
     paddingVertical: 14,
-    alignItems: 'center',
+    alignItems: 'center'
   },
   ctaStart: {
-    backgroundColor: '#1F6FEB',
+    backgroundColor: '#1F6FEB'
   },
   ctaDisabled: {
-    backgroundColor: '#334155',
+    backgroundColor: '#334155'
   },
   ctaText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '700',
-  },
-});
+    fontWeight: '700'
+  }
+})

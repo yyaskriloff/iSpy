@@ -1,10 +1,10 @@
-import { NativeModule } from 'expo';
+import { NativeModule } from 'expo'
 
-import type { IspySignalingEvents, ServerStartResult } from './IspySignaling.types';
+import type { IspySignalingEvents, ServerStartResult } from './IspySignaling.types'
 
 class IspySignalingModuleWeb extends NativeModule<IspySignalingEvents> {
   async startServer(_port: number, _pin: string): Promise<ServerStartResult> {
-    throw new Error('iSpy signaling server is not available on web');
+    throw new Error('iSpy signaling server is not available on web')
   }
 
   async stopServer(): Promise<void> {}
@@ -18,34 +18,30 @@ class IspySignalingModuleWeb extends NativeModule<IspySignalingEvents> {
   async stopBrowse(): Promise<void> {}
 
   async sendToViewer(_json: string): Promise<boolean> {
-    return false;
+    return false
   }
 
   async sendOffer(_sdp: string): Promise<boolean> {
-    return false;
+    return false
   }
 
-  async sendIce(
-    _candidate: string,
-    _sdpMid?: string | null,
-    _sdpMLineIndex?: number | null,
-  ): Promise<boolean> {
-    return false;
+  async sendIce(_candidate: string, _sdpMid?: string | null, _sdpMLineIndex?: number | null): Promise<boolean> {
+    return false
   }
 
   async sendBye(): Promise<boolean> {
-    return false;
+    return false
   }
 
   async disconnectViewer(): Promise<void> {}
 
   getLanAddress(): string {
-    return '';
+    return ''
   }
 
   isServerRunning(): boolean {
-    return false;
+    return false
   }
 }
 
-export default new IspySignalingModuleWeb();
+export default new IspySignalingModuleWeb()

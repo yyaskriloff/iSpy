@@ -1,3 +1,3 @@
-import { registerGlobals } from 'react-native-webrtc';
+import { registerGlobals } from 'react-native-webrtc'
 
-registerGlobals();
+registerGlobals()

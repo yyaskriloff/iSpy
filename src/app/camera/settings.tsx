@@ -1,11 +1,11 @@
-import { router } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { router } from 'expo-router'
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
 
-import { useCameraSessionContext } from '@/hooks/camera-session-context';
-import { STREAM_CONFIG } from '@/lib/stream-config';
+import { useCameraSessionContext } from '@/hooks/camera-session-context'
+import { STREAM_CONFIG } from '@/lib/stream-config'
 
 export default function CameraSettingsScreen() {
-  const session = useCameraSessionContext();
+  const session = useCameraSessionContext()
 
   return (
     <View style={styles.root}>
@@ -26,8 +26,8 @@ export default function CameraSettingsScreen() {
           </View>
           <Switch
             value={session.discoverable}
-            onValueChange={(value) => {
-              void session.setDiscoverable(value);
+            onValueChange={value => {
+              void session.setDiscoverable(value)
             }}
             trackColor={{ false: '#334155', true: '#1F6FEB' }}
             thumbColor="#F8FAFC"
@@ -47,13 +47,13 @@ export default function CameraSettingsScreen() {
         {session.previewError ? <Text style={styles.error}>{session.previewError}</Text> : null}
       </ScrollView>
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#0B1220',
+    backgroundColor: '#0B1220'
   },
   header: {
     flexDirection: 'row',
@@ -61,65 +61,65 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 8,
+    paddingBottom: 8
   },
   title: {
     color: '#F4F7FB',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '700'
   },
   close: {
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 999,
-    backgroundColor: '#1B2838',
+    backgroundColor: '#1B2838'
   },
   closeText: {
     color: '#F8FAFC',
-    fontWeight: '600',
+    fontWeight: '600'
   },
   content: {
     padding: 16,
-    gap: 10,
+    gap: 10
   },
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 8,
+    marginBottom: 8
   },
   settingCopy: {
     flex: 1,
-    gap: 4,
+    gap: 4
   },
   settingTitle: {
     color: '#F4F7FB',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '700'
   },
   settingBody: {
     color: '#A8B3C7',
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 18
   },
   status: {
     color: '#F4F7FB',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600'
   },
   meta: {
     color: '#A8B3C7',
-    fontSize: 14,
+    fontSize: 14
   },
   pin: {
     color: '#7DD3FC',
     fontSize: 28,
     fontWeight: '700',
     letterSpacing: 4,
-    marginVertical: 4,
+    marginVertical: 4
   },
   error: {
     color: '#FDA4AF',
-    fontSize: 14,
-  },
-});
+    fontSize: 14
+  }
+})
