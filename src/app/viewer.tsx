@@ -19,6 +19,7 @@ export default function ViewerScreen() {
   const insets = useSafeAreaInsets();
   const session = useViewerSession();
   const connected = session.status === 'connecting' || session.status === 'connected';
+  const inputsEditable = session.status !== 'connected';
 
   return (
     <KeyboardAvoidingView
@@ -100,7 +101,7 @@ export default function ViewerScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="numbers-and-punctuation"
-                editable={!connected}
+                editable={inputsEditable}
                 style={styles.input}
               />
             </View>
@@ -114,7 +115,7 @@ export default function ViewerScreen() {
             placeholderTextColor="#64748B"
             keyboardType="number-pad"
             maxLength={4}
-            editable={!connected}
+            editable={inputsEditable}
             style={styles.input}
           />
 

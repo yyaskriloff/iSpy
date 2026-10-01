@@ -95,7 +95,10 @@ class IspySignalingModule : Module() {
       }
 
       val server = SignalingServer(expectedPin = pin, listener = listener, port = port)
-      server.start()
+      // NanoHTTPD defaults to SOCKET_READ_TIMEOUT=5000ms. That SO_TIMEOUT closes
+      // idle WebSockets ~5s after ICE finishes (no more signaling traffic), which
+      // the camera treats as viewer disconnect and tears down the peer connection.
+      server.start(0 /* infinite read timeout */, false)
       serverRef.set(server)
 
       val ip = getLanIpv4()

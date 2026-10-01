@@ -17,7 +17,8 @@
         "NSLocalNetworkUsageDescription": "iSpy uses the local network so a viewer phone can connect to the camera phone.",
         "NSBonjourServices": ["_ispy._tcp."],
         "UIBackgroundModes": ["audio"]
-      }
+      },
+      "bitcode": false
     },
     "android": {
       "package": "com.ispy.app",
@@ -38,7 +39,15 @@
         "FOREGROUND_SERVICE_CAMERA",
         "FOREGROUND_SERVICE_MICROPHONE",
         "WAKE_LOCK",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WAKE_LOCK",
+        "android.permission.BLUETOOTH"
       ]
     },
     "web": {
@@ -68,6 +77,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "154a1d34-34fb-41c1-9244-95d5459c3515"
+      }
     }
   }
 }

@@ -367,6 +367,8 @@ private final class ViewerConnection {
       let mid = json["sdpMid"] as? String
       let index = json["sdpMLineIndex"] as? Int
       onIce?(candidate, mid, index)
+    case "ping":
+      sendJSON(["type": "pong"])
     default:
       sendJSON(["type": "error", "code": "invalid", "message": "unknown type"])
     }

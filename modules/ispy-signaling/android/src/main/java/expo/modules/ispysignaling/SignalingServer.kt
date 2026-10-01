@@ -145,6 +145,10 @@ class SignalingServer(
           val index = if (json.has("sdpMLineIndex")) json.optInt("sdpMLineIndex") else null
           listener.onViewerIce(s, candidate, mid, index)
         }
+        "ping" -> {
+          // Resets NanoHTTPD SO_TIMEOUT; reply is optional.
+          sendSafe(JSONObject().put("type", "pong").toString())
+        }
         else -> {
           sendSafe(
             JSONObject()

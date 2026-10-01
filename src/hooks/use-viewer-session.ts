@@ -64,6 +64,7 @@ export function useViewerSession(): ViewerSession {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const intentionalCloseRef = useRef(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keepaliveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const browseSubsRef = useRef<EventSubscription[]>([]);
   const hostRef = useRef('');
   const pinRef = useRef('');
@@ -147,6 +148,27 @@ export function useViewerSession(): ViewerSession {
     setHost(camera.host);
   }
 
+  function stopKeepalive() {
+    if (keepaliveTimerRef.current) {
+      clearInterval(keepaliveTimerRef.current);
+      keepaliveTimerRef.current = null;
+    }
+  }
+
+  function startKeepalive(ws: WebSocket) {
+    stopKeepalive();
+    // NanoHTTPD defaults to a 5s SO_TIMEOUT. Any inbound frame resets it.
+    // Empty ICE is a no-op on camera builds (blank candidate ignored).
+    keepaliveTimerRef.current = setInterval(() => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      try {
+        ws.send(JSON.stringify({ type: 'ice', candidate: '' }));
+      } catch {
+        // ignore
+      }
+    }, STREAM_CONFIG.signalingKeepaliveMs);
+  }
+
   function disposePeer() {
     try {
       pcRef.current?.close();
@@ -161,6 +183,7 @@ export function useViewerSession(): ViewerSession {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
+    stopKeepalive();
     try {
       wsRef.current?.close();
     } catch {
@@ -272,6 +295,10 @@ export function useViewerSession(): ViewerSession {
         break;
       }
       case 'error':
+        // Ignore non-fatal protocol replies (e.g. older builds rejecting unknown types).
+        if (msg.code === 'invalid' || msg.message === 'unknown type') {
+          break;
+        }
         setError(msg.message ?? msg.code ?? 'Signaling error');
         setStatus('error');
         setStatusText(msg.message ?? 'Error');
@@ -331,6 +358,7 @@ export function useViewerSession(): ViewerSession {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        startKeepalive(ws);
         ws.send(
           JSON.stringify({
             type: 'hello',
@@ -352,6 +380,7 @@ export function useViewerSession(): ViewerSession {
 
       ws.onclose = () => {
         wsRef.current = null;
+        stopKeepalive();
         if (!intentionalCloseRef.current) {
           setStatus('connecting');
           scheduleReconnect();
