@@ -103,7 +103,7 @@ importers:
         specifier: ~19.2.2
         version: 19.2.18
       eslint:
-        specifier: ^9.0.0
+        specifier: ^9.39.5
         version: 9.39.5(supports-color@8.1.1)
       eslint-config-expo:
         specifier: ~57.0.2
