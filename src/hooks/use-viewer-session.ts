@@ -11,7 +11,6 @@ import type { DiscoveredCamera } from 'ispy-signaling';
 import IspySignaling from 'ispy-signaling';
 
 import { STREAM_CONFIG, wsUrlForHost } from '@/lib/stream-config';
-import { loadLastHost, saveLastHost } from '@/lib/pin-store';
 
 type Status = 'idle' | 'connecting' | 'connected' | 'error';
 type ConnectMode = 'discovered' | 'manual';
@@ -69,6 +68,7 @@ export function useViewerSession(): ViewerSession {
   const hostRef = useRef('');
   const pinRef = useRef('');
   const modeRef = useRef<ConnectMode>('discovered');
+  const selectedCameraIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     hostRef.current = host;
@@ -79,11 +79,11 @@ export function useViewerSession(): ViewerSession {
   useEffect(() => {
     modeRef.current = mode;
   }, [mode]);
+  useEffect(() => {
+    selectedCameraIdRef.current = selectedCameraId;
+  }, [selectedCameraId]);
 
   useEffect(() => {
-    void (async () => {
-      setHost(await loadLastHost());
-    })();
     return () => {
       intentionalCloseRef.current = true;
       cleanupConnection();
@@ -121,7 +121,11 @@ export function useViewerSession(): ViewerSession {
       }),
       IspySignaling.addListener('onCameraLost', (event) => {
         setCameras((prev) => prev.filter((c) => c.id !== event.id));
-        setSelectedCameraId((current) => (current === event.id ? null : current));
+        setSelectedCameraId((current) => {
+          if (current !== event.id) return current;
+          setHost('');
+          return null;
+        });
       }),
     ];
     try {
@@ -137,8 +141,11 @@ export function useViewerSession(): ViewerSession {
     setModeState(next);
     setError(null);
     if (next === 'discovered') {
+      setHost('');
+      setSelectedCameraId(null);
       setStatusText('Choose a camera and enter the PIN');
     } else {
+      setSelectedCameraId(null);
       setStatusText('Enter camera IP and PIN');
     }
   }
@@ -328,6 +335,12 @@ export function useViewerSession(): ViewerSession {
     const trimmedHost = hostRef.current.trim();
     const trimmedPin = pinRef.current.trim();
 
+    if (modeRef.current === 'discovered' && !selectedCameraIdRef.current) {
+      setStatus('error');
+      setStatusText('Select a discovered camera');
+      setError('No camera selected');
+      return;
+    }
     if (!trimmedHost) {
       setStatus('error');
       setStatusText(
@@ -345,7 +358,6 @@ export function useViewerSession(): ViewerSession {
       return;
     }
 
-    await saveLastHost(trimmedHost);
     const url = wsUrlForHost(trimmedHost);
 
     // Pause browsing while connected to reduce chatter.
