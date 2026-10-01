@@ -29,10 +29,25 @@ export type ServerErrorEvent = {
   message: string;
 };
 
+export type DiscoveredCamera = {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+};
+
+export type CameraFoundEvent = DiscoveredCamera;
+
+export type CameraLostEvent = {
+  id: string;
+};
+
 export type IspySignalingEvents = {
   onViewerAuthenticated: (event: ViewerAuthenticatedEvent) => void;
   onViewerAnswer: (event: ViewerAnswerEvent) => void;
   onViewerIce: (event: ViewerIceEvent) => void;
   onViewerDisconnected: (event: ViewerDisconnectedEvent) => void;
   onServerError: (event: ServerErrorEvent) => void;
+  onCameraFound: (event: CameraFoundEvent) => void;
+  onCameraLost: (event: CameraLostEvent) => void;
 };

@@ -15,7 +15,7 @@
         "NSCameraUsageDescription": "iSpy needs the camera to stream video to a viewer on your Wi‑Fi.",
         "NSMicrophoneUsageDescription": "iSpy needs the microphone to stream audio to a viewer on your Wi‑Fi.",
         "NSLocalNetworkUsageDescription": "iSpy uses the local network so a viewer phone can connect to the camera phone.",
-        "NSBonjourServices": ["_http._tcp."],
+        "NSBonjourServices": ["_ispy._tcp."],
         "UIBackgroundModes": ["audio"]
       }
     },

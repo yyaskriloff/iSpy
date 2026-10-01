@@ -14,9 +14,36 @@ class IspySignalingModule : Module() {
   private val serverRef = AtomicReference<SignalingServer?>(null)
   private var expectedPin: String = ""
   private var listenPort: Int = 8765
+  private var discovery: LanDiscovery? = null
 
   private fun requireContext(): Context =
     requireNotNull(appContext.reactContext) { "React context unavailable" }
+
+  private fun ensureDiscovery(): LanDiscovery {
+    discovery?.let { return it }
+    val created = LanDiscovery(
+      context = requireContext(),
+      onFound = { id, name, host, port ->
+        sendEvent(
+          "onCameraFound",
+          mapOf(
+            "id" to id,
+            "name" to name,
+            "host" to host,
+            "port" to port,
+          ),
+        )
+      },
+      onLost = { id ->
+        sendEvent("onCameraLost", mapOf("id" to id))
+      },
+      onError = { message ->
+        sendEvent("onServerError", mapOf("message" to message))
+      },
+    )
+    discovery = created
+    return created
+  }
 
   override fun definition() = ModuleDefinition {
     Name("IspySignaling")
@@ -27,10 +54,12 @@ class IspySignalingModule : Module() {
       "onViewerIce",
       "onViewerDisconnected",
       "onServerError",
+      "onCameraFound",
+      "onCameraLost",
     )
 
     AsyncFunction("startServer") { port: Int, pin: String ->
-      stopServerInternal()
+      stopServerInternal(keepDiscovery = true)
       expectedPin = pin
       listenPort = port
       val listener = object : SignalingServer.Listener {
@@ -81,7 +110,27 @@ class IspySignalingModule : Module() {
     }
 
     AsyncFunction("stopServer") {
-      stopServerInternal()
+      stopServerInternal(keepDiscovery = false)
+      null
+    }
+
+    AsyncFunction("startAdvertising") { name: String, port: Int ->
+      ensureDiscovery().startAdvertising(name, port)
+      null
+    }
+
+    AsyncFunction("stopAdvertising") {
+      discovery?.stopAdvertising()
+      null
+    }
+
+    AsyncFunction("startBrowse") {
+      ensureDiscovery().startBrowse()
+      null
+    }
+
+    AsyncFunction("stopBrowse") {
+      discovery?.stopBrowse()
       null
     }
 
@@ -124,9 +173,15 @@ class IspySignalingModule : Module() {
     Function("isServerRunning") {
       serverRef.get() != null
     }
+
+    OnDestroy {
+      stopServerInternal(keepDiscovery = false)
+      discovery?.stopAll()
+      discovery = null
+    }
   }
 
-  private fun stopServerInternal() {
+  private fun stopServerInternal(keepDiscovery: Boolean) {
     try {
       serverRef.getAndSet(null)?.stop()
     } catch (_: Exception) {
@@ -134,6 +189,9 @@ class IspySignalingModule : Module() {
     try {
       StreamForegroundService.stop(requireContext())
     } catch (_: Exception) {
+    }
+    if (!keepDiscovery) {
+      discovery?.stopAdvertising()
     }
   }
 

@@ -5,6 +5,28 @@ import Network
 
 public class IspySignalingModule: Module {
   private var server: SignalingServer?
+  private var discovery: LanDiscovery?
+
+  private func ensureDiscovery() -> LanDiscovery {
+    if let discovery { return discovery }
+    let created = LanDiscovery()
+    created.onFound = { [weak self] id, name, host, port in
+      self?.sendEvent("onCameraFound", [
+        "id": id,
+        "name": name,
+        "host": host,
+        "port": port,
+      ])
+    }
+    created.onLost = { [weak self] id in
+      self?.sendEvent("onCameraLost", ["id": id])
+    }
+    created.onError = { [weak self] message in
+      self?.sendEvent("onServerError", ["message": message])
+    }
+    discovery = created
+    return created
+  }
 
   public func definition() -> ModuleDefinition {
     Name("IspySignaling")
@@ -14,11 +36,13 @@ public class IspySignalingModule: Module {
       "onViewerAnswer",
       "onViewerIce",
       "onViewerDisconnected",
-      "onServerError"
+      "onServerError",
+      "onCameraFound",
+      "onCameraLost"
     )
 
     AsyncFunction("startServer") { (port: Int, pin: String) -> [String: Any] in
-      self.stopServerInternal()
+      self.stopServerInternal(keepAdvertising: true)
       let server = SignalingServer(pin: pin, port: UInt16(port))
       server.delegate = self
       try server.start()
@@ -34,7 +58,23 @@ public class IspySignalingModule: Module {
     }
 
     AsyncFunction("stopServer") { () in
-      self.stopServerInternal()
+      self.stopServerInternal(keepAdvertising: false)
+    }
+
+    AsyncFunction("startAdvertising") { (name: String, port: Int) in
+      self.ensureDiscovery().startAdvertising(name: name, port: port)
+    }
+
+    AsyncFunction("stopAdvertising") { () in
+      self.discovery?.stopAdvertising()
+    }
+
+    AsyncFunction("startBrowse") { () in
+      self.ensureDiscovery().startBrowse()
+    }
+
+    AsyncFunction("stopBrowse") { () in
+      self.discovery?.stopBrowse()
     }
 
     AsyncFunction("sendToViewer") { (json: String) -> Bool in
@@ -75,11 +115,20 @@ public class IspySignalingModule: Module {
     Function("isServerRunning") { () -> Bool in
       self.server != nil
     }
+
+    OnDestroy {
+      self.stopServerInternal(keepAdvertising: false)
+      self.discovery?.stopAll()
+      self.discovery = nil
+    }
   }
 
-  private func stopServerInternal() {
+  private func stopServerInternal(keepAdvertising: Bool) {
     server?.stop()
     server = nil
+    if !keepAdvertising {
+      discovery?.stopAdvertising()
+    }
   }
 
   private static func lanIpv4() -> String? {
@@ -105,7 +154,6 @@ public class IspySignalingModule: Module {
       )
       let ip = String(cString: hostname)
       if ip.hasPrefix("127.") { continue }
-      // Prefer Wi-Fi / en*
       if name.hasPrefix("en") {
         return ip
       }

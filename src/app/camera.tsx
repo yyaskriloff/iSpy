@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RTCView } from 'react-native-webrtc';
 
@@ -10,7 +10,8 @@ import { STREAM_CONFIG } from '@/lib/stream-config';
 export default function CameraScreen() {
   const insets = useSafeAreaInsets();
   const session = useCameraSession();
-  const streaming = session.status === 'starting' || session.status === 'waiting' || session.status === 'connected';
+  const streaming =
+    session.status === 'starting' || session.status === 'waiting' || session.status === 'connected';
 
   return (
     <View style={styles.root}>
@@ -36,6 +37,23 @@ export default function CameraScreen() {
         </View>
 
         <View style={styles.panel}>
+          <View style={styles.settingRow}>
+            <View style={styles.settingCopy}>
+              <Text style={styles.settingTitle}>Discoverable</Text>
+              <Text style={styles.settingBody}>
+                When on, viewers on this Wi‑Fi can see this camera. They still need the PIN to watch.
+              </Text>
+            </View>
+            <Switch
+              value={session.discoverable}
+              onValueChange={(value) => {
+                void session.setDiscoverable(value);
+              }}
+              trackColor={{ false: '#334155', true: '#1F6FEB' }}
+              thumbColor="#F8FAFC"
+            />
+          </View>
+
           <Text style={styles.status}>{session.statusText}</Text>
           {session.host ? (
             <Text style={styles.meta}>
@@ -109,6 +127,26 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     gap: 8,
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  settingCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  settingTitle: {
+    color: '#F4F7FB',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  settingBody: {
+    color: '#A8B3C7',
+    fontSize: 13,
+    lineHeight: 18,
   },
   status: {
     color: '#F4F7FB',

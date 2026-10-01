@@ -12,7 +12,12 @@ import type { EventSubscription } from 'expo-modules-core';
 
 import IspySignaling from 'ispy-signaling';
 import { preferHwH264, STREAM_CONFIG } from '@/lib/stream-config';
-import { loadOrCreatePin } from '@/lib/pin-store';
+import {
+  loadCameraName,
+  loadDiscoverable,
+  loadOrCreatePin,
+  saveDiscoverable,
+} from '@/lib/pin-store';
 
 type Status = 'idle' | 'starting' | 'waiting' | 'connected' | 'error';
 
@@ -24,9 +29,22 @@ type CameraSession = {
   wsUrl: string;
   localStream: MediaStream | null;
   error: string | null;
+  discoverable: boolean;
+  setDiscoverable: (enabled: boolean) => Promise<void>;
   start: () => Promise<void>;
   stop: () => Promise<void>;
 };
+
+function waitingText(discoverable: boolean): string {
+  if (Platform.OS === 'ios') {
+    return discoverable
+      ? 'Discoverable on Wi‑Fi — waiting for viewer (keep app open)'
+      : 'Manual mode — share LAN IP + PIN (keep app open)';
+  }
+  return discoverable
+    ? 'Discoverable on Wi‑Fi — waiting for viewer'
+    : 'Manual mode — share LAN IP + PIN';
+}
 
 export function useCameraSession(): CameraSession {
   useKeepAwake();
@@ -38,14 +56,21 @@ export function useCameraSession(): CameraSession {
   const [wsUrl, setWsUrl] = useState('');
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [discoverable, setDiscoverableState] = useState(true);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const runningRef = useRef(false);
+  const discoverableRef = useRef(true);
   const subscriptionsRef = useRef<EventSubscription[]>([]);
 
   useEffect(() => {
+    void (async () => {
+      const enabled = await loadDiscoverable();
+      discoverableRef.current = enabled;
+      setDiscoverableState(enabled);
+    })();
     return () => {
       void cleanup();
     };
@@ -66,10 +91,32 @@ export function useCameraSession(): CameraSession {
     pcRef.current = null;
   }
 
+  async function syncAdvertising(enabled: boolean) {
+    if (!runningRef.current) {
+      try {
+        await IspySignaling.stopAdvertising();
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    if (enabled) {
+      const name = await loadCameraName();
+      await IspySignaling.startAdvertising(name, STREAM_CONFIG.signalingPort);
+    } else {
+      await IspySignaling.stopAdvertising();
+    }
+  }
+
   async function cleanup() {
     runningRef.current = false;
     sessionIdRef.current = null;
     clearSubscriptions();
+    try {
+      await IspySignaling.stopAdvertising();
+    } catch {
+      // ignore
+    }
     try {
       await IspySignaling.sendBye();
     } catch {
@@ -144,6 +191,21 @@ export function useCameraSession(): CameraSession {
     setStatusText('Offer sent — waiting for answer');
   }
 
+  async function setDiscoverable(enabled: boolean) {
+    discoverableRef.current = enabled;
+    setDiscoverableState(enabled);
+    await saveDiscoverable(enabled);
+    try {
+      await syncAdvertising(enabled);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Failed to update discovery';
+      setError(message);
+    }
+    if (runningRef.current && status !== 'connected') {
+      setStatusText(waitingText(enabled));
+    }
+  }
+
   async function start() {
     if (runningRef.current) return;
     setError(null);
@@ -171,12 +233,13 @@ export function useCameraSession(): CameraSession {
       setHost(info.host);
       setWsUrl(info.wsUrl);
       runningRef.current = true;
+
+      if (discoverableRef.current) {
+        await syncAdvertising(true);
+      }
+
       setStatus('waiting');
-      setStatusText(
-        Platform.OS === 'ios'
-          ? 'Waiting for viewer (keep app open on iOS)'
-          : 'Waiting for viewer',
-      );
+      setStatusText(waitingText(discoverableRef.current));
 
       clearSubscriptions();
       subscriptionsRef.current = [
@@ -212,7 +275,7 @@ export function useCameraSession(): CameraSession {
           sessionIdRef.current = null;
           if (runningRef.current) {
             setStatus('waiting');
-            setStatusText('Waiting for viewer');
+            setStatusText(waitingText(discoverableRef.current));
           }
         }),
       ];
@@ -237,6 +300,8 @@ export function useCameraSession(): CameraSession {
     wsUrl,
     localStream,
     error,
+    discoverable,
+    setDiscoverable,
     start,
     stop,
   };

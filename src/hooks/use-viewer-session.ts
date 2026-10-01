@@ -6,21 +6,31 @@ import {
   RTCSessionDescription,
 } from 'react-native-webrtc';
 import { useKeepAwake } from 'expo-keep-awake';
+import type { EventSubscription } from 'expo-modules-core';
+import type { DiscoveredCamera } from 'ispy-signaling';
+import IspySignaling from 'ispy-signaling';
 
 import { STREAM_CONFIG, wsUrlForHost } from '@/lib/stream-config';
-import { loadLastHost, saveLastHost, loadOrCreatePin } from '@/lib/pin-store';
+import { loadLastHost, saveLastHost } from '@/lib/pin-store';
 
 type Status = 'idle' | 'connecting' | 'connected' | 'error';
+type ConnectMode = 'discovered' | 'manual';
 
 type ViewerSession = {
   status: Status;
   statusText: string;
+  mode: ConnectMode;
+  setMode: (mode: ConnectMode) => void;
   host: string;
   pin: string;
   remoteStream: MediaStream | null;
   error: string | null;
+  cameras: DiscoveredCamera[];
+  selectedCameraId: string | null;
+  browsing: boolean;
   setHost: (host: string) => void;
   setPin: (pin: string) => void;
+  selectCamera: (camera: DiscoveredCamera) => void;
   connect: () => Promise<void>;
   disconnect: () => void;
 };
@@ -40,28 +50,102 @@ export function useViewerSession(): ViewerSession {
   useKeepAwake();
 
   const [status, setStatus] = useState<Status>('idle');
-  const [statusText, setStatusText] = useState('Enter camera IP and PIN');
+  const [statusText, setStatusText] = useState('Choose a camera and enter the PIN');
+  const [mode, setModeState] = useState<ConnectMode>('discovered');
   const [host, setHost] = useState('');
   const [pin, setPin] = useState('');
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cameras, setCameras] = useState<DiscoveredCamera[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+  const [browsing, setBrowsing] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const intentionalCloseRef = useRef(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const browseSubsRef = useRef<EventSubscription[]>([]);
+  const hostRef = useRef('');
+  const pinRef = useRef('');
+  const modeRef = useRef<ConnectMode>('discovered');
+
+  useEffect(() => {
+    hostRef.current = host;
+  }, [host]);
+  useEffect(() => {
+    pinRef.current = pin;
+  }, [pin]);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
 
   useEffect(() => {
     void (async () => {
       setHost(await loadLastHost());
-      setPin(await loadOrCreatePin());
     })();
     return () => {
       intentionalCloseRef.current = true;
-      cleanup();
+      cleanupConnection();
+      stopBrowse();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (mode === 'discovered' && status === 'idle') {
+      void startBrowse();
+    } else if (mode === 'manual') {
+      stopBrowse();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  function stopBrowse() {
+    browseSubsRef.current.forEach((s) => s.remove());
+    browseSubsRef.current = [];
+    void IspySignaling.stopBrowse().catch(() => undefined);
+    setBrowsing(false);
+  }
+
+  async function startBrowse() {
+    stopBrowse();
+    setCameras([]);
+    setBrowsing(true);
+    browseSubsRef.current = [
+      IspySignaling.addListener('onCameraFound', (camera) => {
+        setCameras((prev) => {
+          const without = prev.filter((c) => c.id !== camera.id);
+          return [...without, camera].sort((a, b) => a.name.localeCompare(b.name));
+        });
+      }),
+      IspySignaling.addListener('onCameraLost', (event) => {
+        setCameras((prev) => prev.filter((c) => c.id !== event.id));
+        setSelectedCameraId((current) => (current === event.id ? null : current));
+      }),
+    ];
+    try {
+      await IspySignaling.startBrowse();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Discovery failed';
+      setError(message);
+      setBrowsing(false);
+    }
+  }
+
+  function setMode(next: ConnectMode) {
+    setModeState(next);
+    setError(null);
+    if (next === 'discovered') {
+      setStatusText('Choose a camera and enter the PIN');
+    } else {
+      setStatusText('Enter camera IP and PIN');
+    }
+  }
+
+  function selectCamera(camera: DiscoveredCamera) {
+    setSelectedCameraId(camera.id);
+    setHost(camera.host);
+  }
 
   function disposePeer() {
     try {
@@ -72,7 +156,7 @@ export function useViewerSession(): ViewerSession {
     pcRef.current = null;
   }
 
-  function cleanup() {
+  function cleanupConnection() {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -193,7 +277,7 @@ export function useViewerSession(): ViewerSession {
         setStatusText(msg.message ?? 'Error');
         if (msg.code === 'bad_pin') {
           intentionalCloseRef.current = true;
-          cleanup();
+          cleanupConnection();
         }
         break;
       case 'bye':
@@ -208,20 +292,26 @@ export function useViewerSession(): ViewerSession {
   }
 
   async function connectInternal() {
-    cleanup();
+    cleanupConnection();
     intentionalCloseRef.current = false;
     setError(null);
     setStatus('connecting');
     setStatusText('Connecting…');
 
-    const trimmedHost = host.trim();
+    const trimmedHost = hostRef.current.trim();
+    const trimmedPin = pinRef.current.trim();
+
     if (!trimmedHost) {
       setStatus('error');
-      setStatusText('Enter the camera phone LAN IP');
-      setError('Missing host');
+      setStatusText(
+        modeRef.current === 'discovered'
+          ? 'Select a discovered camera'
+          : 'Enter the camera phone LAN IP',
+      );
+      setError(modeRef.current === 'discovered' ? 'No camera selected' : 'Missing host');
       return;
     }
-    if (!/^\d{4}$/.test(pin.trim())) {
+    if (!/^\d{4}$/.test(trimmedPin)) {
       setStatus('error');
       setStatusText('PIN must be 4 digits');
       setError('Invalid PIN');
@@ -230,6 +320,11 @@ export function useViewerSession(): ViewerSession {
 
     await saveLastHost(trimmedHost);
     const url = wsUrlForHost(trimmedHost);
+
+    // Pause browsing while connected to reduce chatter.
+    if (modeRef.current === 'discovered') {
+      stopBrowse();
+    }
 
     try {
       const ws = new WebSocket(url);
@@ -240,7 +335,7 @@ export function useViewerSession(): ViewerSession {
           JSON.stringify({
             type: 'hello',
             role: 'viewer',
-            pin: pin.trim(),
+            pin: trimmedPin,
           }),
         );
         setStatusText('Connected — authenticating');
@@ -262,7 +357,11 @@ export function useViewerSession(): ViewerSession {
           scheduleReconnect();
         } else {
           setStatus('idle');
-          setStatusText('Disconnected');
+          setStatusText(
+            modeRef.current === 'discovered'
+              ? 'Choose a camera and enter the PIN'
+              : 'Enter camera IP and PIN',
+          );
         }
       };
     } catch (e) {
@@ -280,20 +379,33 @@ export function useViewerSession(): ViewerSession {
 
   function disconnect() {
     intentionalCloseRef.current = true;
-    cleanup();
+    cleanupConnection();
     setStatus('idle');
-    setStatusText('Disconnected');
+    setStatusText(
+      modeRef.current === 'discovered'
+        ? 'Choose a camera and enter the PIN'
+        : 'Enter camera IP and PIN',
+    );
+    if (modeRef.current === 'discovered') {
+      void startBrowse();
+    }
   }
 
   return {
     status,
     statusText,
+    mode,
+    setMode,
     host,
     pin,
     remoteStream,
     error,
+    cameras,
+    selectedCameraId,
+    browsing,
     setHost,
     setPin,
+    selectCamera,
     connect,
     disconnect,
   };

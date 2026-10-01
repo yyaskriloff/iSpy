@@ -9,6 +9,14 @@ class IspySignalingModuleWeb extends NativeModule<IspySignalingEvents> {
 
   async stopServer(): Promise<void> {}
 
+  async startAdvertising(_name: string, _port: number): Promise<void> {}
+
+  async stopAdvertising(): Promise<void> {}
+
+  async startBrowse(): Promise<void> {}
+
+  async stopBrowse(): Promise<void> {}
+
   async sendToViewer(_json: string): Promise<boolean> {
     return false;
   }
